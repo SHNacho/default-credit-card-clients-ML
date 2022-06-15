@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 import sklearn
 from sklearn import metrics
 import pandas as pd
-from sklearn.linear_model import SGDClassifier, Perceptron
+from sklearn.linear_model import SGDClassifier, Perceptron, Lasso
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.model_selection import learning_curve, ShuffleSplit, cross_validate
 from sklearn import preprocessing
 from sklearn.dummy import DummyClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectFromModel
 
 import matplotlib.pyplot as plt
 import math
@@ -25,10 +26,10 @@ seed = 3986
 ####################################################################
 # DEFINICIÓN DE MÉTODOS
 
-def hist_plot(df, column, bins = None, rng = None, ylabel = 'Count'):
-    plt.hist(X[column], bins=bins, range=rng)
-    plt.title(column)
-    plt.xlabel(column)
+def hist_plot(serie, bins = None, rng = None, ylabel = 'Count'):
+    plt.hist(serie, bins=bins, range=rng)
+    plt.title(serie.name)
+    plt.xlabel(serie.name)
     plt.ylabel(ylabel)
     plt.show()
     
@@ -67,6 +68,27 @@ def to_onehot(df, column):
     sub_df = df.join(dum_df)
     sub_df = sub_df.drop(columns=[column])
     return sub_df
+
+# Escala las variables de train y test en función de los datos de train
+def standard_scale_vars(train_data, test_data, variables_to_scale):
+    # Iniciamos el scalador
+    scaler = StandardScaler()
+    # Lo ajustamos a los datos de train
+    scaler.fit(train_data[variables_to_scale])
+    # Transformamos train y test con el escalador
+    train_data[variables_to_scale] = scaler.transform(train_data[variables_to_scale])
+    test_data[variables_to_scale] = scaler.transform(test_data[variables_to_scale])
+
+    
+    return train_data, test_data
+
+def matriz_confusion(y_true, y_pred, title = None):
+    confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
+    sn.heatmap(confusion_matrix, annot = True, fmt='d')
+    plt.title(title)
+    plt.xlabel('predicción')
+    plt.ylabel('valor real')
+    plt.show()
 #%%
 
 print("Leyendo los datos ...")
@@ -104,6 +126,10 @@ print("Descripción de las variables del conjunto de train: ")
 print(X_train.describe().T)
 # print(X_train.describe().T[['count', 'mean', 'std']].to_latex(float_format="%.2f", bold_rows=True))
 # %%
+##############################
+# VISUALIZACIÓN DE LOS DATOS #
+##############################
+
 bar_plot(y_train,
          xticks_labels=["Pago", "Impago"],
          title="Número de pagos frente a impagos")
@@ -131,7 +157,11 @@ for column in ['PAY_AMT1', 'PAY_AMT2', 'PAY_AMT3', 'PAY_AMT4', 'PAY_AMT5', 'PAY_
     hist_plot(X_train[column], bins=50, rng=(0, 75000))
 
 # %%
+###############################
+# TRANSFORMACIÓN DE LOS DATOS #
+###############################
 
+# Pasamos las variables necesarias a codificación one-hot en trai y test
 X_train = to_onehot(X_train, 'SEX')
 X_train = to_onehot(X_train, 'EDUCATION')
 X_train = to_onehot(X_train, 'MARRIAGE')
@@ -140,25 +170,7 @@ X_test = to_onehot(X_test, 'SEX')
 X_test = to_onehot(X_test, 'EDUCATION')
 X_test = to_onehot(X_test, 'MARRIAGE')
 
-
 print("Nuevo número de variables: ", X_train.shape[1])
-
-
-
-# Escalamos las variables no binarias
-# Para ello primero separamos los datos en train y test
-# y los escalaremos todos en función de los de train
-def standard_scale_vars(train_data, test_data, variables_to_scale):
-    # Iniciamos el scalador
-    scaler = StandardScaler()
-    # Lo ajustamos a los datos de train
-    scaler.fit(train_data[variables_to_scale])
-    # Transformamos train y test con el escalador
-    train_data[variables_to_scale] = scaler.transform(train_data[variables_to_scale])
-    test_data[variables_to_scale] = scaler.transform(test_data[variables_to_scale])
-
-    
-    return train_data, test_data
     
 # Variables a escalar. Las binarias no será necesario escalarlas
 variables_to_scale = ['LIMIT_BAL', 'AGE', 'PAY_0', 'PAY_2', 'PAY_3',
@@ -171,19 +183,44 @@ X_train, X_test = standard_scale_vars(X_train, X_test, variables_to_scale)
 
 # print(X_train.describe().T[['count', 'mean', 'std']].to_latex(float_format="%.2f", bold_rows=True))
 
+# #%%
+# ################################
+# # SELECCIÓN DE CARACTERÍSTICAS #
+# ################################
+
+# # Usaremos regresión lasso para la selección de características
+# params = [
+#             {
+#                 "alpha" : np.logspace(10e-4, 1)
+#             }
+# ]
+
+# lasso = Lasso()
+
+# clf = GridSearchCV(estimator=lasso,
+#                    param_grid=params,
+#                    cv=5,
+#                    n_jobs=-1)
+
+# clf.fit(X_train, y_train)
+# print("Resultados grid search: ")
+# print("Mejor resultado: ", clf.best_score_)
+# print("Mejores parámetros: ", clf.best_params_)
+# print("")
+
+# #%%
+# # Como el mejor alpha me da 1.0
+# lasso = Lasso(alpha=1.0)
+# lasso.fit(X_train, y_train)
+# model = SelectFromModel(lasso, prefit=True)
+# X_new = model.transform(X_train)
+# print(X_new.shape)
+
 #%%
 # Selección de la métrica
 # metrica = metrics.recall_score
 metrica = metrics.f1_score
 # metrica = metrics.accuracy_score
-
-def matriz_confusion(y_true, y_pred, title = None):
-    confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
-    sn.heatmap(confusion_matrix, annot = True, fmt='d')
-    plt.title(title)
-    plt.xlabel('predicción')
-    plt.ylabel('valor real')
-    plt.show()
 
 #%%
 
@@ -260,8 +297,11 @@ mlp = MLPClassifier(hidden_layer_sizes=(100,),
                     batch_size=64
                     )
 
-clf = GridSearchCV(estimator=mlp, param_grid=params,
-                   scoring='f1', cv=cv, n_jobs=-1)
+clf = GridSearchCV(estimator=mlp, 
+                   param_grid=params,
+                   scoring='f1',
+                   cv=cv,
+                   n_jobs=-1)
 
 clf.fit(X_train, y_train)
 
@@ -296,7 +336,10 @@ params = [
             }
 ]
 
-random_forest = RandomForestClassifier(n_estimators=200, max_depth=30, min_samples_leaf=1000, class_weight='balanced')
+random_forest = RandomForestClassifier(n_estimators=200,
+                                       max_depth=30,
+                                       min_samples_leaf=1000,
+                                       class_weight='balanced')
 
 cv = KFold(n_splits=5, shuffle=False)
 
