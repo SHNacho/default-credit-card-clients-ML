@@ -21,6 +21,52 @@ pd.options.mode.chained_assignment = None
 pd.set_option('display.max_columns', 500)
 
 seed = 3986
+
+####################################################################
+# DEFINICIÓN DE MÉTODOS
+
+def hist_plot(df, column, bins = None, rng = None, ylabel = 'Count'):
+    plt.hist(X[column], bins=bins, range=rng)
+    plt.title(column)
+    plt.xlabel(column)
+    plt.ylabel(ylabel)
+    plt.show()
+    
+def bar_plot(serie, xticks_labels=None, title=None):
+    sn.countplot(x = serie)
+    if title == None:
+        plt.title("Bar plot of var " + serie.name)
+    else:
+        plt.title(title)
+    if(xticks_labels != None):
+        # ticks = serie.unique()
+        # ticks = np.sort(ticks)
+        ticks = np.arange(0, len(xticks_labels))
+        plt.xticks(ticks=ticks, labels=xticks_labels)
+    plt.show()
+    
+def to_onehot(df, column):
+    '''
+    Transforma una columna del dataframe a one-hot encoding
+    Parameters
+    ----------
+    df : DataFrame
+        Dataframe.
+    column : String
+        Nombre de la columna a transformar.
+
+    Returns
+    -------
+    sub_df : DataFrame
+        Dataframe pasado con la codificación de la columna en formato
+        one-hot encoding.
+
+    '''
+    sub_df = df[column]
+    dum_df = pd.get_dummies(sub_df, prefix = column)
+    sub_df = df.join(dum_df)
+    sub_df = sub_df.drop(columns=[column])
+    return sub_df
 #%%
 
 print("Leyendo los datos ...")
@@ -53,38 +99,11 @@ X_train, X_test, y_train, y_test = train_test_split(X,
 print("Número de datos de entrenamiento: ", len(y_train))
 print("Número de datos de test: ", len(y_test))
 print("")
-# Descripción de las variables continuas
-print("Descripción de las variables continuas del conjunto de train: ")
+# Descripción de las variables
+print("Descripción de las variables del conjunto de train: ")
 print(X_train.describe().T)
 # print(X_train.describe().T[['count', 'mean', 'std']].to_latex(float_format="%.2f", bold_rows=True))
 # %%
-
-# Función que muestra un histograma de la columna de un dataframe
-def hist_plot(df, column, bins = None, rng = None, ylabel = 'Count'):
-    plt.hist(X[column], bins=bins, range=rng)
-    plt.title(column)
-    plt.xlabel(column)
-    plt.ylabel(ylabel)
-    plt.show()
-    
-def bar_plot(serie, xticks_labels=None, title=None):
-    sn.countplot(x = serie)
-    if title == None:
-        plt.title("Bar plot of var " + serie.name)
-    else:
-        plt.title(title)
-    if(xticks_labels != None):
-        # ticks = serie.unique()
-        # ticks = np.sort(ticks)
-        ticks = np.arange(0, len(xticks_labels))
-        plt.xticks(ticks=ticks, labels=xticks_labels)
-    plt.show()
-
-# sn.countplot(x=y)
-# plt.title("Número de \"si\" frente a \"no\"")
-# plt.xticks(ticks=[0, 1], labels=["Pago", "Impago"])
-# plt.show()
-
 bar_plot(y_train,
          xticks_labels=["Pago", "Impago"],
          title="Número de pagos frente a impagos")
@@ -105,8 +124,6 @@ hist_plot(X_train['LIMIT_BAL'], bins=50)
 for column in ['PAY_0', 'PAY_2', 'PAY_3', 'PAY_4', 'PAY_5', 'PAY_6']:
     bar_plot(X_train[column])
 
-plt.show()
-
 for column in ['BILL_AMT1', 'BILL_AMT2', 'BILL_AMT3', 'BILL_AMT4', 'BILL_AMT5', 'BILL_AMT6']:
     hist_plot(X_train[column], bins=50, rng=(0, 250000))
     
@@ -114,29 +131,6 @@ for column in ['PAY_AMT1', 'PAY_AMT2', 'PAY_AMT3', 'PAY_AMT4', 'PAY_AMT5', 'PAY_
     hist_plot(X_train[column], bins=50, rng=(0, 75000))
 
 # %%
-
-def to_onehot(df, column):
-    '''
-    Transforma una columna del dataframe a one-hot encoding
-    Parameters
-    ----------
-    df : DataFrame
-        Dataframe.
-    column : String
-        Nombre de la columna a transformar.
-
-    Returns
-    -------
-    sub_df : DataFrame
-        Dataframe pasado con la codificación de la columna en formato
-        one-hot encoding.
-
-    '''
-    sub_df = df[column]
-    dum_df = pd.get_dummies(sub_df, prefix = column)
-    sub_df = df.join(dum_df)
-    sub_df = sub_df.drop(columns=[column])
-    return sub_df
 
 X_train = to_onehot(X_train, 'SEX')
 X_train = to_onehot(X_train, 'EDUCATION')
