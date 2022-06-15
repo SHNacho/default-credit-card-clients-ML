@@ -7,10 +7,11 @@ from sklearn import metrics
 import pandas as pd
 from sklearn.linear_model import SGDClassifier, Perceptron
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
-from sklearn.model_selection import learning_curve, ShuffleSplit
+from sklearn.model_selection import learning_curve, ShuffleSplit, cross_validate
 from sklearn import preprocessing
 from sklearn.dummy import DummyClassifier
 from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 import matplotlib.pyplot as plt
 import math
@@ -55,6 +56,7 @@ print("")
 # Descripción de las variables continuas
 print("Descripción de las variables continuas del conjunto de train: ")
 print(X_train.describe().T)
+# print(X_train.describe().T[['count', 'mean', 'std']].to_latex(float_format="%.2f", bold_rows=True))
 # %%
 
 # Función que muestra un histograma de la columna de un dataframe
@@ -78,13 +80,6 @@ def bar_plot(serie, xticks_labels=None, title=None):
         plt.xticks(ticks=ticks, labels=xticks_labels)
     plt.show()
 
-def hist_plot(serie, bins = None, rng = None, ylabel = 'Count'):
-    plt.hist(serie, bins=bins, range=rng)
-    plt.title(serie.name)
-    plt.xlabel(serie.name)
-    plt.ylabel(ylabel)
-    plt.show()
-
 # sn.countplot(x=y)
 # plt.title("Número de \"si\" frente a \"no\"")
 # plt.xticks(ticks=[0, 1], labels=["Pago", "Impago"])
@@ -104,6 +99,19 @@ bar_plot(X_train['MARRIAGE'],
          xticks_labels=['Married', 'Single', 'Others'])
         
 hist_plot(X_train['AGE'])
+
+hist_plot(X_train['LIMIT_BAL'], bins=50)
+
+for column in ['PAY_0', 'PAY_2', 'PAY_3', 'PAY_4', 'PAY_5', 'PAY_6']:
+    bar_plot(X_train[column])
+
+plt.show()
+
+for column in ['BILL_AMT1', 'BILL_AMT2', 'BILL_AMT3', 'BILL_AMT4', 'BILL_AMT5', 'BILL_AMT6']:
+    hist_plot(X_train[column], bins=50, rng=(0, 250000))
+    
+for column in ['PAY_AMT1', 'PAY_AMT2', 'PAY_AMT3', 'PAY_AMT4', 'PAY_AMT5', 'PAY_AMT6']:
+    hist_plot(X_train[column], bins=50, rng=(0, 75000))
 
 # %%
 
@@ -137,12 +145,7 @@ X_train = to_onehot(X_train, 'MARRIAGE')
 X_test = to_onehot(X_test, 'SEX')
 X_test = to_onehot(X_test, 'EDUCATION')
 X_test = to_onehot(X_test, 'MARRIAGE')
-# X_train = to_onehot(X_train, 'PAY_0')
-# X_train = to_onehot(X_train, 'PAY_2')
-# X_train = to_onehot(X_train, 'PAY_3')
-# X_train = to_onehot(X_train, 'PAY_4')
-# X_train = to_onehot(X_train, 'PAY_5')
-# X_train = to_onehot(X_train, 'PAY_6')
+
 
 print("Nuevo número de variables: ", X_train.shape[1])
 
@@ -172,7 +175,27 @@ variables_to_scale = ['LIMIT_BAL', 'AGE', 'PAY_0', 'PAY_2', 'PAY_3',
 
 X_train, X_test = standard_scale_vars(X_train, X_test, variables_to_scale)
 
+# print(X_train.describe().T[['count', 'mean', 'std']].to_latex(float_format="%.2f", bold_rows=True))
+
 #%%
+# Selección de la métrica
+# metrica = metrics.recall_score
+metrica = metrics.f1_score
+# metrica = metrics.accuracy_score
+
+def matriz_confusion(y_true, y_pred, title = None):
+    confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
+    sn.heatmap(confusion_matrix, annot = True, fmt='d')
+    plt.title(title)
+    plt.xlabel('predicción')
+    plt.ylabel('valor real')
+    plt.show()
+
+#%%
+
+############################################################################
+############################ LOGISTIC REGRESION ############################
+############################################################################
 
 params = [
             {
@@ -191,11 +214,10 @@ cv = KFold(n_splits=5, shuffle=False)
 
 best_estimators_rl = {}
 
-metrica = 'recall'
 print("------------ Regresión Logística ------------")
 # Creamos el estimador
 estimador = SGDClassifier(loss="log", 
-                          class_weight = "balanced",
+                          class_weight = 'balanced',
                           early_stopping=False, 
                           n_jobs=-1,
                           random_state=seed)        
@@ -203,56 +225,107 @@ estimador = SGDClassifier(loss="log",
 clf = GridSearchCV(estimator = estimador,
                    param_grid = params,
                    cv = cv, 
-                   n_jobs = -1, scoring = metrica)
+                   n_jobs = -1, scoring = 'f1')
 # Lo entrenamos con los datos de train
 clf.fit(X_train, y_train)
+print("Resultados grid search: ")
 print("Mejor resultado: ", clf.best_score_)
 print("Mejores parámetros: ", clf.best_params_)
 print("")
-best_estimators_rl[metrica] = clf.best_estimator_
 
-y_pred = clf.predict(X_test)
-print("Test score: ", metrics.f1_score(y_test, y_pred))
-print("Test score: ", metrics.recall_score(y_test, y_pred))
+y_pred_rl_train = clf.predict(X_train)
+y_pred_rl_test = clf.predict(X_test)
+print("Ein = ", metrica(y_train, y_pred_rl_train))
+print("Eout = ", metrica(y_test, y_pred_rl_test))
 
 # Dibujamos la matriz de confusión
-def matriz_confusion(y_true, y_pred, title = None):
-    confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
-    sn.heatmap(confusion_matrix, annot = True, fmt='d')
-    plt.title(title)
-    plt.xlabel('predicción')
-    plt.ylabel('valor real')
-    plt.show()
-
-matriz_confusion(y_test, y_pred)
+matriz_confusion(y_test, y_pred_rl_test)
 
 
 
 #%%
 
-# Multilayer Perceptron
+############################################################################
+########################## MULTILAYER PERCEPTRON ###########################
+############################################################################
+
 print("------------ Multilayer Perceptron ------------")
 
+params = [
+            {
+                "learning_rate_init" : [0.0001, 0.001, 0.01, 0.1],
+            }
+]
 
-clf = MLPClassifier(hidden_layer_sizes=(100,),
+
+mlp = MLPClassifier(hidden_layer_sizes=(100,),
                     activation='relu',
                     solver='adam',
                     learning_rate_init=0.0001,
                     max_iter=1000,
                     batch_size=64
                     )
+
+clf = GridSearchCV(estimator=mlp, param_grid=params,
+                   scoring='f1', cv=cv, n_jobs=-1)
+
 clf.fit(X_train, y_train)
-y_pred = clf.predict(X_train)
-print("Train Accuracy: ", metrics.accuracy_score(y_train, y_pred))
-y_pred = clf.predict(X_test)
-print("Test Accuracy: ", metrics.accuracy_score(y_test, y_pred))
-print("Test f1: ", metrics.recall_score(y_test, y_pred))
-print("Test f1: ", metrics.recall_score(y_test, y_pred))
+
+print("Resultados tras grid search sobre el parámetro learning_rate: ")
+print("Mejor resultado: ", clf.best_score_)
+print("Mejores parámetros: ", clf.best_params_)
+
+
+clf.fit(X_train, y_train)
+y_pred_mlp_train = clf.predict(X_train)
+y_pred_mlp_test = clf.predict(X_test)
+
+print("Ein = ", metrica(y_train, y_pred_mlp_train))
+print("Eout = ", metrica(y_test, y_pred_mlp_test))
+
+    
+matriz_confusion(y_test, y_pred_mlp_test)
 
 #%%
 
-    
-matriz_confusion(y_test, y_pred)
+############################################################################
+############################## RANDOM FOREST ###############################
+############################################################################
+print("------------ Random Forest ------------")
+
+# Ajuste del parámetro max_features
+# https://stats.stackexchange.com/questions/111968/random-forest-how-to-handle-overfitting
+params = [
+            {
+                # "max_features" : [0.1, 0.3, 0.5, 0.7, 0.9],
+                "max_features" : [0.3],
+            }
+]
+
+random_forest = RandomForestClassifier(n_estimators=200, max_depth=30, min_samples_leaf=1000, class_weight='balanced')
+
+cv = KFold(n_splits=5, shuffle=False)
+
+clf = GridSearchCV(estimator = random_forest,
+                   param_grid = params,
+                   cv = cv, 
+                   n_jobs = -1, scoring = 'f1')
+
+clf.fit(X_train, y_train)
+
+print("Resultados tras grid search sobre el parámetro max_features: ")
+print("Mejor resultado: ", clf.best_score_)
+print("Mejores parámetros: ", clf.best_params_)
+
+y_pred_rf_train = clf.predict(X_train)
+y_pred_rf_test = clf.predict(X_test)
+
+
+
+print("Ein = ", metrica(y_train, y_pred_rf_train))
+print("Eout = ", metrica(y_test, y_pred_rf_test))
+
+matriz_confusion(y_test, y_pred_rf_test)
 
 
 
